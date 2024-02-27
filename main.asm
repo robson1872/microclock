@@ -5,24 +5,27 @@ jmp TIMER1_OVF_ISR
 reset:
 
 ; Pinos
-.equ pin_mode = PINB0    ; Pino para o botão MODE
-.equ pin_start = PINB1   ; Pino para o botão START
-.equ pin_reset = PINB2   ; Pino para o botão RESET
+.equ pin_mode = PINB0    ; Pino para o botï¿½o MODE
+.equ pin_start = PINB1   ; Pino para o botï¿½o START
+.equ pin_reset = PINB2   ; Pino para o botï¿½o RESET
 .equ pin_led = PORTC0          ; Pino para o led
 
-; Definições de variáveis
-.def TEMP_SECS_COUNTER = r16   ; Registrador para armazenar os segundos (cronômetro)
-.def TEMP_MINUTES_COUNTER = r17   ; Registrador para armazenar os minutos (cronômetro)
+; Definiï¿½ï¿½es de variï¿½veis
+.def TEMP_SECS_COUNTER = r16   ; Registrador para armazenar os segundos (cronï¿½metro)
+.def TEMP_MINUTES_COUNTER = r17   ; Registrador para armazenar os minutos (cronï¿½metro)
 .def state = r18          ; Registrador para armazenar o state atual
-.def FLAG_START = r19      ; Registrador para a flag do botão START
-.def FLAG_RESET = r20      ; Registrador para a flag do botão RESET
-.def FLAG_MODE = r21       ; Registrador para a flag do botão MODE
+.def FLAG_START = r19      ; Registrador para a flag do botï¿½o START
+.def FLAG_RESET = r20      ; Registrador para a flag do botï¿½o RESET
+.def FLAG_MODE = r21       ; Registrador para a flag do botï¿½o MODE
 .def MINUTES_COUNTER = r24          ; Registrador para armazenar o minuto
 .def SECS_COUNTER = r25         ; Registrador para armazenar o segundo
-.def temp = r23            ; Registrador temporário 
+.def temp = r23            ; Registrador temporï¿½rio 
+.def config_state = r26           ; Registrador para armazenar o estado atual do modo de configuraÃ§Ã£o
+.def CONFIG_MINUTES_COUNTER = r27 ; Registrador para armazenar os segundos (configuraÃ§Ã£o)
+.def CONFIG_SECS_COUNTER = r28  ; Registrador para armazenar os minutos (configuraÃ§Ã£o)
 
 
-; Configuração de interrupções
+; Configuraï¿½ï¿½o de interrupï¿½ï¿½es
 #define DELAY 1 ;segundos
 .equ clk 16.0e6 ;clock speed
 .equ PRESCALE = 0b100 ;/256 prescale
@@ -51,21 +54,21 @@ lds temp, TIMSK1
 sbr temp, 1 <<OCIE1A
 sts TIMSK1, temp
 sei
-; Fim da configuração de interrupções
+; Fim da configuraï¿½ï¿½o de interrupï¿½ï¿½es
 
-;Inicialização da stack
+;Inicializaï¿½ï¿½o da stack
 ldi temp, low(RAMEND)
 out SPL, temp
 ldi temp, high(RAMEND)
 out SPH, temp
 
-; Configuração de portas
-ldi temp, (1<<pin_mode)|(1<<pin_start)|(1<<pin_reset)  ; Configura pinos de botão como entrada
-out DDRB, temp          ; Define porta B como saída
-ldi temp, (1<<pin_led)      ; Configura pino do pin_led como saída
-out DDRC, temp          ; Define porta C como saída
+; Configuraï¿½ï¿½o de portas
+ldi temp, (1<<pin_mode)|(1<<pin_start)|(1<<pin_reset)  ; Configura pinos de botï¿½o como entrada
+out DDRB, temp          ; Define porta B como saï¿½da
+ldi temp, (1<<pin_led)      ; Configura pino do pin_led como saï¿½da
+out DDRC, temp          ; Define porta C como saï¿½da
 
-; Configuração inicial dos registradores
+; Configuraï¿½ï¿½o inicial dos registradores
 clr TEMP_SECS_COUNTER
 clr TEMP_MINUTES_COUNTER
 clr SECS_COUNTER
@@ -73,11 +76,11 @@ clr MINUTES_COUNTER
 clr state
 
 loop:
-    ;limpa flags imediatamente após trocar de modo
+    ;limpa flags imediatamente apï¿½s trocar de modo
     clr FLAG_START
     clr FLAG_RESET
 
-    lds temp, state ; Carrega o estado atual de funcionamento em temp
+    mov temp, state ; Carrega o estado atual de funcionamento em temp
 
     ; Compara temp com os valores definidos para cada modo
     cpi temp, 0x0
@@ -90,44 +93,44 @@ loop:
     rjmp loop
     
 
-;(MODO 1 DE OPERAÇÃO)
+;(MODO 1 DE OPERAï¿½ï¿½O)
 modo_relogio:
     call atualiza_display
 
-    ; Verifica botão MODE
+    ; Verifica botï¿½o MODE
     call poll_mode
 
     rjmp loop
 
-;(MODO 2 DE OPERAÇÃO)
+;(MODO 2 DE OPERAï¿½ï¿½O)
 modo_cronometro:
     call atualiza_display
 
-    ; Verifica botão MODE
+    ; Verifica botï¿½o MODE
     call poll_mode
 
-    ; Verifica botão START
+    ; Verifica botï¿½o START
     call poll_start
 
-    ; Verifica botão RESET
+    ; Verifica botï¿½o RESET
     call poll_reset
 
     rjmp loop
 
-;(MODO 3 DE OPERAÇÃO)
+;(MODO 3 DE OPERAï¿½ï¿½O)
 modo_configuracao:
-    ; Verifica botão MODE
+    ; Verifica botï¿½o MODE
     call poll_mode
 
-    ; Verifica botão START
+    ; Verifica botï¿½o START
     call poll_start
 
-    ; Verifica botão RESET
+    ; Verifica botï¿½o RESET
     call poll_reset
 
     rjmp loop
 
-; Lógica para iniciar/parar o cronômetro
+; Lï¿½gica para iniciar/parar o cronï¿½metro
 inicia_para_tempo:
     push temp
     ldi temp, 0x01
@@ -135,9 +138,9 @@ inicia_para_tempo:
     pop temp
     ret
 
-; Lógica para zerar o cronômetro 
+; Lï¿½gica para zerar o cronï¿½metro 
 reinicia_tempo:
-    cpi FLAG_START, 0; Se a flag não estiver 1, pular rotina
+    cpi FLAG_START, 0; Se a flag nï¿½o estiver 1, pular rotina
     brne fim_reinicia_tempo
 
     clr TEMP_MINUTES_COUNTER
@@ -148,49 +151,68 @@ reinicia_tempo:
 fim_reinicia_tempo:
     ret
 
-; TODO: Lógica para andar pelo tempo no modo de configuração
+; Lï¿½gica para andar pelo tempo no modo de configuraï¿½ï¿½o
+; Alterna entre os possÃ­veis modos: Ajustes de unidade dos segundos, dezena dos segundos, unidade dos minutos e dezena dos minutos
 ajusta_tempo:
+    inc config_state
+    cpi config_state, 0x03
+    brne fim_ajusta_tempo
+    clr config_state
+
+fim_ajusta_tempo:
     ret
 
-; TODO: Lógica para aplicar o ajuste de tempo
+; Lï¿½gica para aplicar o ajuste de tempo
 aplica_ajuste:
+    mov MINUTES_COUNTER, CONFIG_MINUTES_COUNTER
+    mov SECS_COUNTER, CONFIG_SECS_COUNTER
     ret
 
-; TODO: Lógica para mostrar minutos e segundos no display de 7 segmentos
+; TODO: Lï¿½gica para mostrar minutos e segundos no display de 7 segmentos
 atualiza_display:
     ret
 
-; TODO: Lógica para imprimir na serial (Modo 1)
+; TODO: Lï¿½gica para imprimir na serial (Modo 1)
 uart_modo_relogio:
     ret 
 
-; TODO: Lógica para imprimir na serial (Modo 2)
+; TODO: Lï¿½gica para imprimir na serial (Modo 2)
 uart_modo_cronometro:
     ret 
 
-; TODO: Lógica para imprimir na serial (Modo 3)
+; TODO: Lï¿½gica para imprimir na serial (Modo 3)
 uart_modo_configuracao:
     ret 
 
-; TODO: Rotina de interrupção do Timer0 (0.5 segundo)
+; Rotina de interrupï¿½ï¿½o do Timer0 (0.5 segundo)
 TIMER0_OVF_ISR:
+    cpi state, 0x2
+    brne END_ISR_1
+
+    ;LÃ³gica para piscar o display 7 segmentos de acordo com o estado atual de config_state
+
+END_ISR_1:
     reti
 
-; Interrupção do Timer1 (1 segundo)
+; Interrupï¿½ï¿½o do Timer1 (1 segundo)
 TIMER1_OVF_ISR:
     push temp
     in temp, SREG
     push temp
 
-    lds temp, state
+    mov temp, state
 
-    ; Compara temp com 0x00 (modo relógio)
+    ; Compara temp com 0x00 (modo relï¿½gio)
     cpi temp, 0x00
     breq atualiza_modo_relogio
 
-    ; Compara temp com 0x01 (modo cronômetro)
+    ; Compara temp com 0x01 (modo cronï¿½metro)
     cpi temp, 0x01
     breq atualiza_modo_cronometro
+
+    ; Compara temp com 0x02 (modo cronï¿½metro)
+    cpi temp, 0x02
+    breq atualiza_modo_configuracao
 
     rjmp END_ISR
 
@@ -212,7 +234,7 @@ no_overflow:
     rjmp END_ISR
 
 atualiza_modo_cronometro:
-    cpi FLAG_START, 1; Se a flag não estiver 1, pular incremento de tempo
+    cpi FLAG_START, 1; Se a flag nï¿½o estiver 1, pular incremento de tempo
     brne END_ISR
 
     inc TEMP_SECS_COUNTER
@@ -231,7 +253,70 @@ atualiza_modo_cronometro:
 
     rjmp END_ISR
 
+atualiza_modo_configuracao:
+    cpi config_state, 0x00
+    breq atualiza_seg_un
+
+    cpi config_state, 0x01
+    breq atualiza_seg_dez
+
+    cpi config_state, 0x02
+    breq atualiza_min_un
+
+    cpi config_state, 0x02
+    breq atualiza_min_dez
+
+    rjmp END_ISR
+
+atualiza_seg_un:
+    ; Incrementa CONFIG_SECS_COUNTER em 1
+    lds temp, CONFIG_SECS_COUNTER ; Carrega CONFIG_SECS_COUNTER em temp
+    inc temp ; Incrementa temp
+    andi temp, 0x0F ; ObtÃ©m o Ãºltimo dÃ­gito de temp
+    cpi temp, 0x0A ; Compara se o Ãºltimo dÃ­gito Ã© 10
+    brne skip_subtraction_seg_un
+    subi temp, 10 ; Subtrai 10 se o Ãºltimo dÃ­gito Ã© 10
+skip_subtraction_seg_un:
+    sts CONFIG_SECS_COUNTER, temp ; Armazena o valor atualizado de volta em CONFIG_SECS_COUNTER
+    rjmp END_ISR ; 
+
+atualiza_seg_dez:
+    ; Incrementa CONFIG_SECS_COUNTER em 10
+    lds temp, CONFIG_SECS_COUNTER
+    subi temp, 246 ; 256 - 10 = 246, para simular adiÃ§Ã£o de 10 com underflow
+    cpi temp, 60
+    brlo no_decrement_seg_dez
+    subi temp, 196 ; 256 - 60 = 196, para resetar ao inÃ­cio caso >= 60
+no_decrement_seg_dez:
+    sts CONFIG_SECS_COUNTER, temp
+    rjmp END_ISR
+
+atualiza_min_un:
+    ; Incrementa CONFIG_MINUTES_COUNTER em 1
+    lds r16, CONFIG_MINUTES_COUNTER
+    inc r16
+    andi r16, 0x0F
+    cpi r16, 0x0A
+    brne skip_subtraction_min_un
+    subi r16, 10
+skip_subtraction_min_un:
+    sts CONFIG_MINUTES_COUNTER, r16
+    rjmp END_ISR
+
+atualiza_min_dez:
+    ; Incrementa CONFIG_MINUTES_COUNTER em 10
+    lds r16, CONFIG_MINUTES_COUNTER
+    subi r16, 246 ; Mesma lÃ³gica de adiÃ§Ã£o com underflow
+    cpi r16, 60
+    brlo no_decrement_min_dez
+    subi r16, 196 ; Reseta se o valor for >= 60
+no_decrement_min_dez:
+    sts CONFIG_MINUTES_COUNTER, r16
+    rjmp END_ISR
+
+
 END_ISR:
+    ; Fim da interrupÃ§Ã¢o, restauraÃ§Ã£o do contexto de SREG
     pop temp
     out SREG, temp
     pop temp
@@ -245,26 +330,35 @@ delay_50ms:
 	ldi r24,LOW(c50ms)
 delay:
     sbiw R24,1 ; Contagem regressiva
-	brne delay ; até zero 
+	brne delay ; atï¿½ zero 
     ret
 
 
-; Verificar botão (pin_mode)
+; Verificar botï¿½o (pin_mode)
 poll_mode:
-    sbis PINB, pin_mode      ; Pula se o botão MODE estiver pressionado
-    rjmp end_poll ; Se o botão não estiver pressionado, encerra
+    sbis PINB, pin_mode      ; Pula se o botï¿½o MODE estiver pressionado
+    rjmp end_poll ; Se o botï¿½o nï¿½o estiver pressionado, encerra
 
     ; Debouncing
     call delay_50ms         ; Espera 50ms para debouncing
 
-    sbis PINB, pin_mode      ; Verifica novamente após o delay
-    rjmp mode_pressed      ; Se ainda estiver pressionado, considera como um pressionamento válido
+    sbis PINB, pin_mode      ; Verifica novamente apï¿½s o delay
+    rjmp mode_pressed      ; Se ainda estiver pressionado, considera como um pressionamento vï¿½lido
 
 mode_not_pressed:
     rjmp end_poll
 
 mode_pressed:
     inc state
+    cpi state, 2
+    ; Setup para o modo de configuraÃ§Ã£o
+    brne not_config
+    mov CONFIG_MINUTES_COUNTER, MINUTES_COUNTER
+    mov CONFIG_SECS_COUNTER, SECS_COUNTER
+    call atualiza_display
+    clr config_state
+
+not_config:
     cpi state, 3
     brne end_poll
     clr state
@@ -272,51 +366,51 @@ mode_pressed:
 end_poll:
     ret
 
-; Verificar botão (pin_start)
+; Verificar botï¿½o (pin_start)
 poll_start:
-    sbis PINB, pin_start        ; Pula se o botão START estiver pressionado
-    rjmp end_poll               ; Se o botão não estiver pressionado, encerra
+    sbis PINB, pin_start        ; Pula se o botï¿½o START estiver pressionado
+    rjmp end_poll               ; Se o botï¿½o nï¿½o estiver pressionado, encerra
 
     ; Debouncing
     call delay_50ms             ; Espera 50ms para debouncing
 
-    sbis PINB, pin_start        ; Verifica novamente após o delay
-    rjmp start_pressed         ; Se ainda estiver pressionado, considera como um pressionamento válido
+    sbis PINB, pin_start        ; Verifica novamente apï¿½s o delay
+    rjmp start_pressed         ; Se ainda estiver pressionado, considera como um pressionamento vï¿½lido
 
 start_not_pressed:
     rjmp end_poll
 
 start_pressed:
-    ; Compara temp com 0x01 (modo cronômetro)
+    ; Compara temp com 0x01 (modo cronï¿½metro)
     cpi state, 0x01
     call inicia_para_tempo
 
-    ; Compara temp com 0x02 (modo configuração)
+    ; Compara temp com 0x02 (modo configuraï¿½ï¿½o)
     cpi state, 0x02
     call ajusta_tempo
 
     rjmp end_poll
 
-; Verificar botão (pin_reset)
+; Verificar botï¿½o (pin_reset)
 poll_reset:
-    sbis PINB, pin_reset        ; Pula se o botão RESET estiver pressionado
-    rjmp end_poll               ; Se o botão não estiver pressionado, encerra
+    sbis PINB, pin_reset        ; Pula se o botï¿½o RESET estiver pressionado
+    rjmp end_poll               ; Se o botï¿½o nï¿½o estiver pressionado, encerra
 
     ; Debouncing
     call delay_50ms             ; Espera 50ms para debouncing
 
-    sbis PINB, pin_reset        ; Verifica novamente após o delay
-    rjmp reset_pressed         ; Se ainda estiver pressionado, considera como um pressionamento válido
+    sbis PINB, pin_reset        ; Verifica novamente apï¿½s o delay
+    rjmp reset_pressed         ; Se ainda estiver pressionado, considera como um pressionamento vï¿½lido
 
 reset_not_pressed:
     rjmp end_poll
 
 reset_pressed:
-    ; Compara temp com 0x01 (modo cronômetro)
+    ; Compara temp com 0x01 (modo cronï¿½metro)
     cpi state, 0x01
     call reinicia_tempo
 
-    ; Compara temp com 0x02 (modo configuração)
+    ; Compara temp com 0x02 (modo configuraï¿½ï¿½o)
     cpi state, 0x02
     call aplica_ajuste
 
