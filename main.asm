@@ -1,16 +1,25 @@
+; Projeto Relógio Digital
+; Disciplina: Microcontroladores e Aplicações
+; Professor: Dr. Erick de Andrade Barboza
+; Alunos:
+;  - Robson Bruno Alves Pinheiro
+;  - Victor Alexandre da R. Monteiro Miranda
+
+; Definição do vetor de interrupções
 jmp reset
 .org OC1Aaddr
 jmp TIMER1_OVF_ISR
 
+; Inicialização do programa
 reset:
 
 ; Pinos
 .equ pin_mode = PINB0    ; Pino para o bot�o MODE
 .equ pin_start = PINB1   ; Pino para o bot�o START
 .equ pin_reset = PINB2   ; Pino para o bot�o RESET
-.equ pin_led = PORTC0          ; Pino para o led
 
-; Defini��es de vari�veis
+; Defini��es de vari�veis como registradores
+; TODO: Padronizar o casing das variáveis
 .def TEMP_SECS_COUNTER = r16   ; Registrador para armazenar os segundos (cron�metro)
 .def TEMP_MINUTES_COUNTER = r17   ; Registrador para armazenar os minutos (cron�metro)
 .def state = r18          ; Registrador para armazenar o state atual
@@ -73,8 +82,9 @@ clr TEMP_SECS_COUNTER
 clr TEMP_MINUTES_COUNTER
 clr SECS_COUNTER
 clr MINUTES_COUNTER
-clr state
+clr state ; Inicializa o estado do sistema como 0 (modo rel�gio)
 
+; Loop principal do programa
 loop:
     ;limpa flags imediatamente ap�s trocar de modo
     clr FLAG_START
@@ -119,6 +129,8 @@ modo_cronometro:
 
 ;(MODO 3 DE OPERA��O)
 modo_configuracao:
+    call atualiza_display
+
     ; Verifica bot�o MODE
     call poll_mode
 
@@ -253,6 +265,7 @@ atualiza_modo_cronometro:
 
     rjmp END_ISR
 
+; Lógica para atualizar o tempo no modo de configuração de acordo com o estado atual de config_state
 atualiza_modo_configuracao:
     cpi config_state, 0x00
     breq atualiza_seg_un
@@ -313,7 +326,6 @@ atualiza_min_dez:
 no_decrement_min_dez:
     sts CONFIG_MINUTES_COUNTER, r16
     rjmp END_ISR
-
 
 END_ISR:
     ; Fim da interrupçâo, restauração do contexto de SREG
