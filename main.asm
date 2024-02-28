@@ -4,6 +4,7 @@
 ; Alunos:
 ;  - Robson Bruno Alves Pinheiro
 ;  - Victor Alexandre da R. Monteiro Miranda
+; Descrição: Implementação de um relógio digital usando o microcontrolador AVR ATmega328P.
 
 ; Definição do vetor de interrupções
 jmp reset
@@ -40,27 +41,26 @@ SEG_TABLE_END:
 .equ pin_reset = PINB2   ; Pino para o botão RESET
 
 ; Definições de variáveis como registradores
-; TODO: Padronizar o casing das variáveis
-.def TEMP_SECS_COUNTER = r16   ; Registrador para armazenar os segundos (cronômetro)
-.def TEMP_MINUTES_COUNTER = r17   ; Registrador para armazenar os minutos (cronômetro)
+.def temp_secs_counter = r16   ; Registrador para armazenar os segundos (cronômetro)
+.def temp_minutes_counter = r17   ; Registrador para armazenar os minutos (cronômetro)
 .def state = r18          ; Registrador para armazenar o state atual
-.def FLAG_START = r19      ; Registrador para a flag do botão START
-.def FLAG_RESET = r20      ; Registrador para a flag do botão RESET
-.def FLAG_MODE = r21       ; Registrador para a flag do botão MODE
-.def MINUTES_COUNTER = r22          ; Registrador para armazenar o minuto
-.def SECS_COUNTER = r23         ; Registrador para armazenar o segundo
+.def flag_start = r19      ; Registrador para a flag do botão START
+.def flag_reset = r20      ; Registrador para a flag do botão RESET
+.def flag_mode = r21       ; Registrador para a flag do botão MODE
+.def minutes_counter = r22          ; Registrador para armazenar o minuto
+.def secs_counter = r23         ; Registrador para armazenar o segundo
 .def string_pointer = r24       ; Registrador para armazenar o ponteiro da string
 .def string_pointer2 = r25      ; Registrador para armazenar o ponteiro da string
 .def config_state = r26           ; Registrador para armazenar o estado atual do modo de configuração
-.def CONFIG_MINUTES_COUNTER = r27 ; Registrador para armazenar os segundos (configuração)
-.def CONFIG_SECS_COUNTER = r28  ; Registrador para armazenar os minutos (configuração)
-.def temp = r24            ; Registrador temporário
-.def temp_seg = r25            ; Registrador temporário 2
+.def config_minutes_counter = r27 ; Registrador para armazenar os segundos (configuração)
+.def config_secs_counter = r28  ; Registrador para armazenar os minutos (configuração)
+.def temp = r29            ; Registrador temporário
+.def temp_seg = r30            ; Registrador temporário 2
 
 ; Configuração UART
 ; 16Mhz, 9600 baud, UBRR = 103
 .equ UBRRvalue = 103
-ldi temp, high (UBRRvalue) ;baud rate
+ldi temp, high (UBRRvalue) ; baud rate
 sts UBRR0H, temp
 ldi temp, low (UBRRvalue)
 sts UBRR0L, temp
@@ -82,9 +82,9 @@ ds_string: .db " Ajustando a dezena dos segundos", 0
 um_string: .db " Ajustando a unidade dos minutos", 0
 dm_string: .db " Ajustando a dezena dos minutos", 0
 
-; configuração de interrupções
+; Configuração de interrupções
 #define DELAY 1 ;segundos
-.equ clk 16.0e6 ;clock speed
+.equ clk = 16.0e6 ;clock speed
 .equ PRESCALE = 0b100 ;/256 prescale
 .equ PRESCALE_DIV = 256
 .equ WGM = 0b0100 ;Waveform generation mode: CTC
@@ -115,11 +115,9 @@ sei
 
 
 ; Configuração de inicialização segmentos
-
 ldi temp, 0xFF         ; Configura todas as portas como saída
 out DDRB, temp
 out DDRD, temp
-
 ldi temp, 0       ; Inicializa os dígitos como desligados
 out DIGIT_PORT, temp
 ; Fim da Configuração de inicialização segmentos
@@ -131,23 +129,21 @@ ldi temp, high(RAMEND)
 out SPH, temp
 
 ; configuração de portas
-ldi temp, (1<<pin_mode)|(1<<pin_start)|(1<<pin_reset)  ; Configura pinos de botão como entrada
-out DDRB, temp          ; Define porta B como saída
-ldi temp, (1<<pin_led)      ; Configura pino do pin_led como saída
-out DDRC, temp          ; Define porta C como saída
+ldi temp, (1<<pin_mode)|(1<<pin_start)|(1<<pin_reset) ; Configura pinos 
+out DDRB, temp                   
 
 ; configuração inicial dos registradores
-clr TEMP_SECS_COUNTER
-clr TEMP_MINUTES_COUNTER
-clr SECS_COUNTER
-clr MINUTES_COUNTER
+clr temp_secs_counter
+clr temp_minutes_counter
+clr secs_counter
+clr minutes_counter
 clr state ; Inicializa o estado do sistema como 0 (modo relógio)
 
 ; Loop principal do programa
 loop:
     ;limpa flags imediatamente após trocar de modo
-    clr FLAG_START
-    clr FLAG_RESET
+    clr flag_start
+    clr flag_reset
 
     mov temp, state ; Carrega o estado atual de funcionamento em temp
 
@@ -163,6 +159,7 @@ loop:
 
 
 ;(MODO 1 DE OPERAÇÃO)
+; Enquanto MODE não for pressionado, o sistema permanece no modo de relógio
 modo_relogio:
     call atualiza_display
 
@@ -172,6 +169,7 @@ modo_relogio:
     rjmp loop
 
 ;(MODO 2 DE OPERAÇÃO)
+; Enquanto MODE não for pressionado, o sistema permanece no modo de cronômetro
 modo_cronometro:
     call atualiza_display
 
@@ -187,6 +185,7 @@ modo_cronometro:
     rjmp loop
 
 ;(MODO 3 DE OPERAÇÃO)
+; Enquanto MODE não for pressionado, o sistema permanece no modo de configuração
 modo_configuracao:
     call atualiza_display
 
@@ -201,22 +200,26 @@ modo_configuracao:
 
     rjmp loop
 
-; Lógica para iniciar/parar o cronômetro
+; Rotina: inicia_para_tempo
+; Descrição: Inicia ou para o cronômetro de acordo com flag_start
+; Parâmetros: temp_minutes_counter, temp_secs_counter, flag_start
 inicia_para_tempo:
     call uart_modo_cronometro_start
     push temp
     ldi temp, 0x01
-    eor FLAG_START, temp
+    eor flag_start, temp
     pop temp
     ret
 
-; Lógica para zerar o cronômetro
+; Rotina: reinicia_tempo
+; Descrição: Reinicia o tempo do cronômetro
+; Parâmetros: temp_minutes_counter, temp_secs_counter
 reinicia_tempo:
-    cpi FLAG_START, 0; Se a flag não estiver 1, pular rotina
+    cpi flag_start, 0; Se a flag não estiver 1, pular rotina
     brne fim_reinicia_tempo
 
-    clr TEMP_MINUTES_COUNTER
-    clr TEMP_SECS_COUNTER
+    clr temp_minutes_counter
+    clr temp_secs_counter
 
     call atualiza_display
     call uart_modo_cronometro_reset
@@ -224,8 +227,8 @@ reinicia_tempo:
 fim_reinicia_tempo:
     ret
 
-; Lógica para andar pelo tempo no modo de configuração
-; Alterna entre os possíveis modos: Ajustes de unidade dos segundos, dezena dos segundos, unidade dos minutos e dezena dos minutos
+; Rotina: ajusta_tempo
+; Descrição: Alterna entre os possíveis modos: Ajustes de unidade dos segundos, dezena dos segundos, unidade dos minutos e dezena dos minutos
 ajusta_tempo:
     inc config_state
     cpi config_state, 0x03
@@ -235,21 +238,58 @@ ajusta_tempo:
 fim_ajusta_tempo:
     ret
 
-; Lógica para aplicar o ajuste de tempo
+; Rotina: aplica_ajuste
+; Descrição: Aplica o ajuste feito no modo de configuração
+; Parâmetros: minutos_counter, config_minutes_counter, secs_counter, config_secs_counter
 aplica_ajuste:
-    mov MINUTES_COUNTER, CONFIG_MINUTES_COUNTER
-    mov SECS_COUNTER, CONFIG_SECS_COUNTER
+    mov minutes_counter, config_minutes_counter
+    mov secs_counter, config_secs_counter
     ret
 
-; Lógica para mostrar minutos e segundos no display de 7 segmentos
+; Rotina: atualiza_display
+; Descrição: Atualiza o display de acordo com o estado atual do sistema
+; Parâmetros: state, estado atual do sistema
 atualiza_display:
-    lds temp, seconds
+	push temp
+    cpi state, 0x00
+	breq atualiza_relogio
+	cpi state, 0x01
+	breq atualiza_cronometro
+	cpi state, 0x02
+	breq atualiza_config
+    rjmp fim_atualiza_display
+
+; Atualiza o display com os valores do modo relógio
+atualiza_relogio:
+	mov temp, secs_counter
     call DISPLAY_TWO_DIGITS
-    lds temp, minutes
+    mov temp, minutes_counter
     call DISPLAY_TWO_DIGITS
+	rjmp fim_atualiza_display
+
+; Atualiza o display com os valores do modo cronômetro
+atualiza_cronometro:
+	mov temp, temp_secs_counter
+    call DISPLAY_TWO_DIGITS
+    mov temp, temp_minutes_counter
+    call DISPLAY_TWO_DIGITS
+	rjmp fim_atualiza_display
+
+; Atualiza o display com os valores do modo configuração
+atualiza_config:
+	mov temp, config_secs_counter
+    call DISPLAY_TWO_DIGITS
+    mov temp, config_minutes_counter
+    call DISPLAY_TWO_DIGITS
+	rjmp fim_atualiza_display
+
+fim_atualiza_display:
+	pop temp
     ret
 
-; Lógica para imprimir na serial (Modo 1)
+; Rotina: uart_modo_relogio
+; Descrição: Envia "[MODO 1] MM:SS" via serial
+; Parâmetros: Nada.
 uart_modo_relogio:
     ; Envia "[MODO 1]"
     ldi r24, low(mode1_string)
@@ -266,7 +306,9 @@ uart_modo_relogio:
 
     ret
 
-; Lógica para imprimir na serial (Modo 2)
+; Rotina: uart_modo_cronometro_start
+; Descrição: Envia "[MODO 2] " via serial, chamada por outras rotinas de uart do modo cronômetro
+; Parâmetros: Nada.
 uart_modo_cronometro:
     ; Envia "[MODO 2]"
     ldi r24, low(mode2_string)
@@ -275,7 +317,9 @@ uart_modo_cronometro:
 
     ret
 
-; Lógica para imprimir na serial (Modo 2)
+; Rotina: uart_modo_cronometro_zero
+; Descrição: Envia "[MODO 2] ZERO" via serial
+; Parâmetros: Nada.
 uart_modo_cronometro_zero:
     call uart_modo_cronometro ; Envia "[MODO 2]"
 
@@ -286,7 +330,9 @@ uart_modo_cronometro_zero:
 
     ret
 
-; Lógica para imprimir na serial (Modo 2)
+; Rotina: uart_modo_cronometro_start
+; Descrição: Envia "[MODO 2] START" via serial
+; Parâmetros: Nada.
 uart_modo_cronometro_start:
     call uart_modo_cronometro ; Envia "[MODO 2]"
 
@@ -297,7 +343,9 @@ uart_modo_cronometro_start:
 
     ret
 
-; Lógica para imprimir na serial (Modo 2)
+; Rotina: uart_modo_cronometro_start
+; Descrição: Envia "[MODO 2] RESET" via serial
+; Parâmetros: Nada.
 uart_modo_cronometro_reset:
     call uart_modo_cronometro ; Envia "[MODO 2]"
 
@@ -308,7 +356,9 @@ uart_modo_cronometro_reset:
 
     ret
 
-; TODO: Lógica para imprimir na serial (Modo 3)
+; Rotina: uart_modo_configuracao
+; Descrição: Envia mensagens de configuração via serial de acordo com o estado atual de config_state
+; Parâmetros: config_state, estado atual do modo de configuração
 uart_modo_configuracao:
     ; Envia "[MODO 3]"
     ldi r24, low(mode3_string)
@@ -354,144 +404,6 @@ envia_dm:
 
     ret
 
-; Rotina de interrupção do Timer0 (0.5 segundo)
-TIMER0_OVF_ISR:
-    cpi state, 0x2
-    brne END_ISR_1
-
-    ;Lógica para piscar o display 7 segmentos de acordo com o estado atual de config_state
-
-END_ISR_1:
-    reti
-
-; interrupção do Timer1 (1 segundo)
-; A cada segundo, incrementa o contador de segundos e atualiza o display
-; Dependendo do estado atual, pode atualizar o tempo no modo de cronômetro ou configuração
-TIMER1_OVF_ISR:
-    push temp
-    in temp, SREG
-    push temp
-
-    mov temp, state
-
-    ; Compara temp com 0x00 (modo relógio)
-    cpi temp, 0x00
-    breq atualiza_modo_relogio
-
-    ; Compara temp com 0x01 (modo cronômetro)
-    cpi temp, 0x01
-    breq atualiza_modo_cronometro
-
-    ; Compara temp com 0x02 (modo cronômetro)
-    cpi temp, 0x02
-    breq atualiza_modo_configuracao
-
-    rjmp END_ISR
-
-atualiza_modo_relogio:
-    inc SECS_COUNTER
-    cpi SECS_COUNTER, 60
-    brne no_overflow
-
-    ldi SECS_COUNTER, 0x0
-    inc MINUTES_COUNTER
-    cpi MINUTES_COUNTER, 60
-    brne no_overflow
-
-    ldi MINUTES_COUNTER, 0X0
-
-no_overflow:
-    call atualiza_display
-    call uart_modo_relogio
-    rjmp END_ISR
-
-atualiza_modo_cronometro:
-    cpi FLAG_START, 1; Se a flag não estiver 1, pular incremento de tempo
-    brne END_ISR
-
-    inc TEMP_SECS_COUNTER
-    cpi TEMP_SECS_COUNTER, 60
-    brne END_ISR
-
-    ldi TEMP_SECS_COUNTER, 0x0
-    inc TEMP_MINUTES_COUNTER
-    cpi TEMP_MINUTES_COUNTER, 60
-    brne END_ISR
-
-    ldi TEMP_MINUTES_COUNTER, 0X0
-
-    call atualiza_display
-
-    rjmp END_ISR
-
-; Lógica para atualizar o tempo no modo de configuração de acordo com o estado atual de config_state
-atualiza_modo_configuracao:
-    cpi config_state, 0x00
-    breq atualiza_seg_un
-
-    cpi config_state, 0x01
-    breq atualiza_seg_dez
-
-    cpi config_state, 0x02
-    breq atualiza_min_un
-
-    cpi config_state, 0x02
-    breq atualiza_min_dez
-
-    rjmp END_ISR
-
-atualiza_seg_un:
-    ; Incrementa CONFIG_SECS_COUNTER em 1
-    lds temp, CONFIG_SECS_COUNTER ; Carrega CONFIG_SECS_COUNTER em temp
-    inc temp ; Incrementa temp
-    andi temp, 0x0F ; Obtém o último dígito de temp
-    cpi temp, 0x0A ; Compara se o último dígito é 10
-    brne skip_subtraction_seg_un
-    subi temp, 10 ; Subtrai 10 se o último dígito é 10
-skip_subtraction_seg_un:
-    sts CONFIG_SECS_COUNTER, temp ; Armazena o valor atualizado de volta em CONFIG_SECS_COUNTER
-    rjmp END_ISR ;
-
-atualiza_seg_dez:
-    ; Incrementa CONFIG_SECS_COUNTER em 10
-    lds temp, CONFIG_SECS_COUNTER
-    subi temp, 246 ; 256 - 10 = 246, para simular adição de 10 com underflow
-    cpi temp, 60
-    brlo no_decrement_seg_dez
-    subi temp, 196 ; 256 - 60 = 196, para resetar ao início caso >= 60
-no_decrement_seg_dez:
-    sts CONFIG_SECS_COUNTER, temp
-    rjmp END_ISR
-
-atualiza_min_un:
-    ; Incrementa CONFIG_MINUTES_COUNTER em 1
-    lds r16, CONFIG_MINUTES_COUNTER
-    inc r16
-    andi r16, 0x0F
-    cpi r16, 0x0A
-    brne skip_subtraction_min_un
-    subi r16, 10
-skip_subtraction_min_un:
-    sts CONFIG_MINUTES_COUNTER, r16
-    rjmp END_ISR
-
-atualiza_min_dez:
-    ; Incrementa CONFIG_MINUTES_COUNTER em 10
-    lds r16, CONFIG_MINUTES_COUNTER
-    subi r16, 246 ; Mesma lógica de adição com underflow
-    cpi r16, 60
-    brlo no_decrement_min_dez
-    subi r16, 196 ; Reseta se o valor for >= 60
-no_decrement_min_dez:
-    sts CONFIG_MINUTES_COUNTER, r16
-    rjmp END_ISR
-
-END_ISR:
-    ; Fim da interrupçâo, restauração do contexto de SREG
-    pop temp
-    out SREG, temp
-    pop temp
-    reti
 
 ; Gera um delay de 50ms (para debouncing)
 delay_50ms:
@@ -505,7 +417,9 @@ delay:
     ret
 
 
-; Verificar botão (pin_mode)
+; Rotina: poll_mode
+; Descrição: Verifica se o botão MODE está pressionado e muda o estado do sistema
+; Parâmetros: state, estado atual do sistema
 poll_mode:
     sbis PINB, pin_mode      ; Pula se o botão MODE estiver pressionado
     rjmp end_poll ; Se o botão não estiver pressionado, encerra
@@ -520,31 +434,35 @@ mode_not_pressed:
     rjmp end_poll
 
 mode_pressed:
-    inc state
+    inc state ; Passa para o próximo estado
     cpi state, 1
-    breq cronometro_start
+    breq cronometro_start ; Se o estado for 1, inicia o cronômetro
     cpi state, 2
     ; Setup para o modo de configuração
     brne not_config
-    mov CONFIG_MINUTES_COUNTER, MINUTES_COUNTER
-    mov CONFIG_SECS_COUNTER, SECS_COUNTER
+    mov config_minutes_counter, minutes_counter
+    mov config_secs_counter, secs_counter
     call atualiza_display
     clr config_state
 
+; Caso o estado seja diferente de 1 ou 2, volta para o estado 0
 not_config:
     cpi state, 3
     brne end_poll
     clr state
     rjmp end_poll
 
+; Lógica para iniciar o cronômetro
 cronometro_start:
     call uart_modo_cronometro_zero
-    rjmp
+    rjmp end_poll
 
 end_poll:
     ret
 
-; Verificar botão (pin_start)
+; Rotina: poll_start
+; Descrição: Verifica se o botão START está pressionado e executa a lógica de acordo com o estado atual
+; Parâmetros: state, estado atual do sistema
 poll_start:
     sbis PINB, pin_start        ; Pula se o botão START estiver pressionado
     rjmp end_poll               ; Se o botão não estiver pressionado, encerra
@@ -569,7 +487,9 @@ start_pressed:
 
     rjmp end_poll
 
-; Verificar botão (pin_reset)
+; Rotina: poll_reset
+; Descrição: Verifica se o botão RESET está pressionado e executa a lógica de acordo com o estado atual
+; Parâmetros: state, estado atual do sistema
 poll_reset:
     sbis PINB, pin_reset        ; Pula se o botão RESET estiver pressionado
     rjmp end_poll               ; Se o botão não estiver pressionado, encerra
@@ -594,42 +514,39 @@ reset_pressed:
 
     rjmp end_poll
 
+
 ; Rotina para enviar uma string armazenada na memória do programa via serial
 ; Entrada: ponteiro para a string
 ; Saída: nenhuma
 send_string:
-    push string_pointer
-    push string_pointer2
-next_char:
     lpm temp, Z+               ; Carrega um byte da string na memória do programa para temp
     tst temp                   ; Testa se o caractere é 0 (fim da string)
     breq end_string           ; Se for 0, termina a rotina
     call send_char            ; Envia o caractere
-    rjmp next_char            ; Vai para o próximo caractere
+    rjmp send_string           ; Vai para o próximo caractere
 end_string:
-    pop string_pointer_2
-    pop string_pointer
     ret
 
 ; Rotina para enviar um caractere via serial
 ; Entrada: temp, caractere a ser enviado
 ; Saída: nenhuma
 send_char:
-    push
+    push temp_seg
     lds temp_seg, UCSR0A            ; Carrega o status da UART
     sbrs temp_seg, UDRE0            ; Espera o registro de dados estar pronto para receber o próximo byte
     rjmp send_char                  ; Loop até estar pronto
     sts UDR0, temp                  ; Envia o caractere
-    ret
+    pop temp_seg
+	ret
 
 ; Rotina auxiliar para transformar os valores de minutos e segundos em strings
-; Entrada: SECS_COUNTER, MINUTES_COUNTER
+; Entrada: secs_counter, minutes_counter
 ; Saída: temp_seg, temp (valores ASCII dos minutos e segundos, respectivamente)
 to_ascii:
     ldi temp, 0x30
-    add temp, SECS_COUNTER
+    add temp, secs_counter
     ldi temp_seg, 0x30
-    add temp_seg, MINUTES_COUNTER
+    add temp_seg, minutes_counter
     ret
 
 
@@ -653,7 +570,137 @@ DISPLAY_TWO_DIGITS:
 ; Sub-rotina para exibir um dígito
 DISPLAY_DIGIT:
     mov r16, temp
-    add r16, SEG_TABLE_START
+	lds temp, SEG_TABLE_START
+    add r16, temp
     out SEGMENT_PORT, r16
     out DIGIT_PORT, r16
     ret
+
+; Interrupção do Timer1 (1 segundo)
+; A cada segundo, incrementa o contador de segundos e atualiza o display
+; Dependendo do estado atual, pode atualizar o tempo no modo de cronômetro ou configuração
+TIMER1_OVF_ISR:
+    push temp
+    in temp, SREG
+    push temp
+
+    mov temp, state
+
+    ; Compara temp com 0x00 (modo relógio)
+    cpi temp, 0x00
+    breq atualiza_modo_relogio
+
+    ; Compara temp com 0x01 (modo cronômetro)
+    cpi temp, 0x01
+    breq atualiza_modo_cronometro
+
+    ; Compara temp com 0x02 (modo cronômetro)
+    cpi temp, 0x02
+    breq atualiza_modo_configuracao
+
+    rjmp END_ISR
+
+atualiza_modo_relogio:
+    inc secs_counter
+    cpi secs_counter, 60
+    brne no_overflow
+
+    ldi secs_counter, 0x0
+    inc minutes_counter
+    cpi minutes_counter, 60
+    brne no_overflow
+
+    ldi minutes_counter, 0X0
+
+no_overflow:
+    call atualiza_display
+    call uart_modo_relogio
+    rjmp END_ISR
+
+atualiza_modo_cronometro:
+    cpi flag_start, 1; Se a flag não estiver 1, pular incremento de tempo
+    brne END_ISR
+
+    inc temp_secs_counter
+    cpi temp_secs_counter, 60
+    brne END_ISR
+
+    ldi temp_secs_counter, 0x0
+    inc temp_minutes_counter
+    cpi temp_minutes_counter, 60
+    brne END_ISR
+
+    ldi temp_minutes_counter, 0X0
+
+    call atualiza_display
+
+    rjmp END_ISR
+
+; Lógica para atualizar o tempo no modo de configuração de acordo com o estado atual de config_state
+atualiza_modo_configuracao:
+    cpi config_state, 0x00
+    breq atualiza_seg_un
+
+    cpi config_state, 0x01
+    breq atualiza_seg_dez
+
+    cpi config_state, 0x02
+    breq atualiza_min_un
+
+    cpi config_state, 0x02
+    breq atualiza_min_dez
+
+    rjmp END_ISR
+
+atualiza_seg_un:
+    ; Incrementa config_secs_counter em 1
+    mov temp, config_secs_counter ; Carrega config_secs_counter em temp
+    inc temp ; Incrementa temp
+    andi temp, 0x0F ; Obtém o último dígito de temp
+    cpi temp, 0x0A ; Compara se o último dígito é 10
+    brne skip_subtraction_seg_un
+    subi temp, 10 ; Subtrai 10 se o último dígito é 10
+skip_subtraction_seg_un:
+    mov config_secs_counter, temp ; Armazena o valor atualizado de volta em config_secs_counter
+    rjmp END_ISR ;
+
+atualiza_seg_dez:
+    ; Incrementa config_secs_counter em 10
+    mov temp, config_secs_counter
+    subi temp, 246 ; 256 - 10 = 246, para simular adição de 10 com underflow
+    cpi temp, 60
+    brlo no_decrement_seg_dez
+    subi temp, 196 ; 256 - 60 = 196, para resetar ao início caso >= 60
+no_decrement_seg_dez:
+    mov config_secs_counter, temp
+    rjmp END_ISR
+
+atualiza_min_un:
+    ; Incrementa config_minutes_counter em 1
+    mov r16, config_minutes_counter
+    inc r16
+    andi r16, 0x0F
+    cpi r16, 0x0A
+    brne skip_subtraction_min_un
+    subi r16, 10
+skip_subtraction_min_un:
+    mov config_minutes_counter, r16
+    rjmp END_ISR
+
+atualiza_min_dez:
+    ; Incrementa config_minutes_counter em 10
+    mov r16, config_minutes_counter
+    subi r16, 246 ; Mesma lógica de adição com underflow
+    cpi r16, 60
+    brlo no_decrement_min_dez
+    subi r16, 196 ; Reseta se o valor for >= 60
+no_decrement_min_dez:
+    mov config_minutes_counter, r16
+    rjmp END_ISR
+
+END_ISR:
+    ; Fim da interrupçâo, restauração do contexto de SREG
+    pop temp
+    out SREG, temp
+    pop temp
+    reti
