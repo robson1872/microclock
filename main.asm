@@ -13,28 +13,49 @@ jmp TIMER1_OVF_ISR
 ; Inicialização do programa
 reset:
 
-; Pinos
-.equ pin_mode = PINB0    ; Pino para o bot�o MODE
-.equ pin_start = PINB1   ; Pino para o bot�o START
-.equ pin_reset = PINB2   ; Pino para o bot�o RESET
+.equ DELAY_COUNT = 1000     ; Contador de atraso (1 segundo)
 
-; Defini��es de vari�veis como registradores
+.equ DIGIT_PORT = PORTB     ; Porta usada para selecionar o dígito
+.equ SEGMENT_PORT = PORTD   ; Porta usada para controlar os segmentos
+
+.equ SEG_A = 0b01111111    ; Segmentos de exibição de 7 segmentos (cátodo comum)
+.equ SEG_B = 0b10111111
+.equ SEG_C = 0b11011111
+.equ SEG_D = 0b11101111
+.equ SEG_E = 0b11110111
+.equ SEG_F = 0b11111011
+.equ SEG_G = 0b11111101
+.equ SEG_DP = 0b11111110
+
+; Tabela de conversão de dígito para segmentos (0 a 9)
+.equ SEGMENT_TABLE = SEG_TABLE_END - SEG_TABLE_START
+
+SEG_TABLE_START:
+    .db SEG_A, SEG_B, SEG_C, SEG_D, SEG_E, SEG_F, SEG_G
+SEG_TABLE_END:
+
+; Pinos
+.equ pin_mode = PINB0    ; Pino para o botão MODE
+.equ pin_start = PINB1   ; Pino para o botão START
+.equ pin_reset = PINB2   ; Pino para o botão RESET
+
+; Definições de variáveis como registradores
 ; TODO: Padronizar o casing das variáveis
-.def TEMP_SECS_COUNTER = r16   ; Registrador para armazenar os segundos (cron�metro)
-.def TEMP_MINUTES_COUNTER = r17   ; Registrador para armazenar os minutos (cron�metro)
+.def TEMP_SECS_COUNTER = r16   ; Registrador para armazenar os segundos (cronômetro)
+.def TEMP_MINUTES_COUNTER = r17   ; Registrador para armazenar os minutos (cronômetro)
 .def state = r18          ; Registrador para armazenar o state atual
-.def FLAG_START = r19      ; Registrador para a flag do bot�o START
-.def FLAG_RESET = r20      ; Registrador para a flag do bot�o RESET
-.def FLAG_MODE = r21       ; Registrador para a flag do bot�o MODE
+.def FLAG_START = r19      ; Registrador para a flag do botão START
+.def FLAG_RESET = r20      ; Registrador para a flag do botão RESET
+.def FLAG_MODE = r21       ; Registrador para a flag do botão MODE
 .def MINUTES_COUNTER = r22          ; Registrador para armazenar o minuto
 .def SECS_COUNTER = r23         ; Registrador para armazenar o segundo
 .def string_pointer = r24       ; Registrador para armazenar o ponteiro da string
-.def string_pointer2 = r25      ; Registrador para armazenar o ponteiro da string 
+.def string_pointer2 = r25      ; Registrador para armazenar o ponteiro da string
 .def config_state = r26           ; Registrador para armazenar o estado atual do modo de configuração
 .def CONFIG_MINUTES_COUNTER = r27 ; Registrador para armazenar os segundos (configuração)
 .def CONFIG_SECS_COUNTER = r28  ; Registrador para armazenar os minutos (configuração)
-.def temp = r24            ; Registrador tempor�rio 
-.def temp_seg = r25            ; Registrador tempor�rio 2
+.def temp = r24            ; Registrador temporário
+.def temp_seg = r25            ; Registrador temporário 2
 
 ; Configuração UART
 ; 16Mhz, 9600 baud, UBRR = 103
@@ -46,8 +67,8 @@ sts UBRR0L, temp
 ; 8 bits, 1 bit de parada, sem paridade
 ldi temp, (3<<UCSZ00)
 sts UCSR0C, temp
-ldi temp, (1<<TXEN0) ; habilitando transmiss�o
-sts UCSR0B, temp; 
+ldi temp, (1<<TXEN0) ; habilitando transmissão
+sts UCSR0B, temp;
 
 ; Definição de constantes que serão enviadas via serial
 mode1_string: .db "[MODO 1] ", 0
@@ -61,7 +82,7 @@ ds_string: .db " Ajustando a dezena dos segundos", 0
 um_string: .db " Ajustando a unidade dos minutos", 0
 dm_string: .db " Ajustando a dezena dos minutos", 0
 
-; Configura��o de interrup��es
+; configuração de interrupções
 #define DELAY 1 ;segundos
 .equ clk 16.0e6 ;clock speed
 .equ PRESCALE = 0b100 ;/256 prescale
@@ -90,30 +111,41 @@ lds temp, TIMSK1
 sbr temp, 1 <<OCIE1A
 sts TIMSK1, temp
 sei
-; Fim da configura��o de interrup��es
+; Fim da configuração de interrupções
 
-;Inicializa��o da stack
+
+; Configuração de inicialização segmentos
+
+ldi temp, 0xFF         ; Configura todas as portas como saída
+out DDRB, temp
+out DDRD, temp
+
+ldi temp, 0       ; Inicializa os dígitos como desligados
+out DIGIT_PORT, temp
+; Fim da Configuração de inicialização segmentos
+
+;Inicialização da stack
 ldi temp, low(RAMEND)
 out SPL, temp
 ldi temp, high(RAMEND)
 out SPH, temp
 
-; Configura��o de portas
-ldi temp, (1<<pin_mode)|(1<<pin_start)|(1<<pin_reset)  ; Configura pinos de bot�o como entrada
-out DDRB, temp          ; Define porta B como sa�da
-ldi temp, (1<<pin_led)      ; Configura pino do pin_led como sa�da
-out DDRC, temp          ; Define porta C como sa�da
+; configuração de portas
+ldi temp, (1<<pin_mode)|(1<<pin_start)|(1<<pin_reset)  ; Configura pinos de botão como entrada
+out DDRB, temp          ; Define porta B como saída
+ldi temp, (1<<pin_led)      ; Configura pino do pin_led como saída
+out DDRC, temp          ; Define porta C como saída
 
-; Configura��o inicial dos registradores
+; configuração inicial dos registradores
 clr TEMP_SECS_COUNTER
 clr TEMP_MINUTES_COUNTER
 clr SECS_COUNTER
 clr MINUTES_COUNTER
-clr state ; Inicializa o estado do sistema como 0 (modo rel�gio)
+clr state ; Inicializa o estado do sistema como 0 (modo relógio)
 
 ; Loop principal do programa
 loop:
-    ;limpa flags imediatamente ap�s trocar de modo
+    ;limpa flags imediatamente após trocar de modo
     clr FLAG_START
     clr FLAG_RESET
 
@@ -128,48 +160,48 @@ loop:
     breq modo_configuracao
 
     rjmp loop
-    
 
-;(MODO 1 DE OPERA��O)
+
+;(MODO 1 DE OPERAÇÃO)
 modo_relogio:
     call atualiza_display
 
-    ; Verifica bot�o MODE
+    ; Verifica botão MODE
     call poll_mode
 
     rjmp loop
 
-;(MODO 2 DE OPERA��O)
+;(MODO 2 DE OPERAÇÃO)
 modo_cronometro:
     call atualiza_display
 
-    ; Verifica bot�o MODE
+    ; Verifica botão MODE
     call poll_mode
 
-    ; Verifica bot�o START
+    ; Verifica botão START
     call poll_start
 
-    ; Verifica bot�o RESET
+    ; Verifica botão RESET
     call poll_reset
 
     rjmp loop
 
-;(MODO 3 DE OPERA��O)
+;(MODO 3 DE OPERAÇÃO)
 modo_configuracao:
     call atualiza_display
 
-    ; Verifica bot�o MODE
+    ; Verifica botão MODE
     call poll_mode
 
-    ; Verifica bot�o START
+    ; Verifica botão START
     call poll_start
 
-    ; Verifica bot�o RESET
+    ; Verifica botão RESET
     call poll_reset
 
     rjmp loop
 
-; L�gica para iniciar/parar o cron�metro
+; Lógica para iniciar/parar o cronômetro
 inicia_para_tempo:
     call uart_modo_cronometro_start
     push temp
@@ -178,9 +210,9 @@ inicia_para_tempo:
     pop temp
     ret
 
-; L�gica para zerar o cron�metro 
+; Lógica para zerar o cronômetro
 reinicia_tempo:
-    cpi FLAG_START, 0; Se a flag n�o estiver 1, pular rotina
+    cpi FLAG_START, 0; Se a flag não estiver 1, pular rotina
     brne fim_reinicia_tempo
 
     clr TEMP_MINUTES_COUNTER
@@ -192,7 +224,7 @@ reinicia_tempo:
 fim_reinicia_tempo:
     ret
 
-; L�gica para andar pelo tempo no modo de configura��o
+; Lógica para andar pelo tempo no modo de configuração
 ; Alterna entre os possíveis modos: Ajustes de unidade dos segundos, dezena dos segundos, unidade dos minutos e dezena dos minutos
 ajusta_tempo:
     inc config_state
@@ -203,22 +235,26 @@ ajusta_tempo:
 fim_ajusta_tempo:
     ret
 
-; L�gica para aplicar o ajuste de tempo
+; Lógica para aplicar o ajuste de tempo
 aplica_ajuste:
     mov MINUTES_COUNTER, CONFIG_MINUTES_COUNTER
     mov SECS_COUNTER, CONFIG_SECS_COUNTER
     ret
 
-; TODO: L�gica para mostrar minutos e segundos no display de 7 segmentos
+; Lógica para mostrar minutos e segundos no display de 7 segmentos
 atualiza_display:
+    lds temp, seconds
+    call DISPLAY_TWO_DIGITS
+    lds temp, minutes
+    call DISPLAY_TWO_DIGITS
     ret
 
-; L�gica para imprimir na serial (Modo 1)
+; Lógica para imprimir na serial (Modo 1)
 uart_modo_relogio:
     ; Envia "[MODO 1]"
     ldi r24, low(mode1_string)
     ldi r25, high(mode1_string)
-    call send_string  
+    call send_string
 
     ; Envia "MM:SS"
     call to_ascii
@@ -228,9 +264,9 @@ uart_modo_relogio:
     mov temp, temp_seg
     call send_char
 
-    ret 
+    ret
 
-; L�gica para imprimir na serial (Modo 2)
+; Lógica para imprimir na serial (Modo 2)
 uart_modo_cronometro:
     ; Envia "[MODO 2]"
     ldi r24, low(mode2_string)
@@ -239,7 +275,7 @@ uart_modo_cronometro:
 
     ret
 
-; L�gica para imprimir na serial (Modo 2)
+; Lógica para imprimir na serial (Modo 2)
 uart_modo_cronometro_zero:
     call uart_modo_cronometro ; Envia "[MODO 2]"
 
@@ -248,9 +284,9 @@ uart_modo_cronometro_zero:
     ldi r25, high(zero_string)
     call send_string
 
-    ret 
+    ret
 
-; L�gica para imprimir na serial (Modo 2)
+; Lógica para imprimir na serial (Modo 2)
 uart_modo_cronometro_start:
     call uart_modo_cronometro ; Envia "[MODO 2]"
 
@@ -259,9 +295,9 @@ uart_modo_cronometro_start:
     ldi r25, high(start_string)
     call send_string
 
-    ret 
+    ret
 
-; L�gica para imprimir na serial (Modo 2)
+; Lógica para imprimir na serial (Modo 2)
 uart_modo_cronometro_reset:
     call uart_modo_cronometro ; Envia "[MODO 2]"
 
@@ -272,14 +308,14 @@ uart_modo_cronometro_reset:
 
     ret
 
-; TODO: L�gica para imprimir na serial (Modo 3)
+; TODO: Lógica para imprimir na serial (Modo 3)
 uart_modo_configuracao:
     ; Envia "[MODO 3]"
     ldi r24, low(mode3_string)
     ldi r25, high(mode3_string)
     call send_string
 
-    ; L�gica para imprimir na serial de acordo com o estado atual de config_state
+    ; Lógica para imprimir na serial de acordo com o estado atual de config_state
     cpi config_state, 0x00
     breq envia_us
     cpi config_state, 0x01
@@ -316,9 +352,9 @@ envia_dm:
     ldi r25, high(dm_string)
     call send_string
 
-    ret 
+    ret
 
-; Rotina de interrup��o do Timer0 (0.5 segundo)
+; Rotina de interrupção do Timer0 (0.5 segundo)
 TIMER0_OVF_ISR:
     cpi state, 0x2
     brne END_ISR_1
@@ -328,7 +364,7 @@ TIMER0_OVF_ISR:
 END_ISR_1:
     reti
 
-; Interrup��o do Timer1 (1 segundo)
+; interrupção do Timer1 (1 segundo)
 ; A cada segundo, incrementa o contador de segundos e atualiza o display
 ; Dependendo do estado atual, pode atualizar o tempo no modo de cronômetro ou configuração
 TIMER1_OVF_ISR:
@@ -338,15 +374,15 @@ TIMER1_OVF_ISR:
 
     mov temp, state
 
-    ; Compara temp com 0x00 (modo rel�gio)
+    ; Compara temp com 0x00 (modo relógio)
     cpi temp, 0x00
     breq atualiza_modo_relogio
 
-    ; Compara temp com 0x01 (modo cron�metro)
+    ; Compara temp com 0x01 (modo cronômetro)
     cpi temp, 0x01
     breq atualiza_modo_cronometro
 
-    ; Compara temp com 0x02 (modo cron�metro)
+    ; Compara temp com 0x02 (modo cronômetro)
     cpi temp, 0x02
     breq atualiza_modo_configuracao
 
@@ -370,7 +406,7 @@ no_overflow:
     rjmp END_ISR
 
 atualiza_modo_cronometro:
-    cpi FLAG_START, 1; Se a flag n�o estiver 1, pular incremento de tempo
+    cpi FLAG_START, 1; Se a flag não estiver 1, pular incremento de tempo
     brne END_ISR
 
     inc TEMP_SECS_COUNTER
@@ -414,7 +450,7 @@ atualiza_seg_un:
     subi temp, 10 ; Subtrai 10 se o último dígito é 10
 skip_subtraction_seg_un:
     sts CONFIG_SECS_COUNTER, temp ; Armazena o valor atualizado de volta em CONFIG_SECS_COUNTER
-    rjmp END_ISR ; 
+    rjmp END_ISR ;
 
 atualiza_seg_dez:
     ; Incrementa CONFIG_SECS_COUNTER em 10
@@ -465,20 +501,20 @@ delay_50ms:
 	ldi r24,LOW(c50ms)
 delay:
     sbiw R24,1 ; Contagem regressiva
-	brne delay ; at� zero 
+	brne delay ; até zero
     ret
 
 
-; Verificar bot�o (pin_mode)
+; Verificar botão (pin_mode)
 poll_mode:
-    sbis PINB, pin_mode      ; Pula se o bot�o MODE estiver pressionado
-    rjmp end_poll ; Se o bot�o n�o estiver pressionado, encerra
+    sbis PINB, pin_mode      ; Pula se o botão MODE estiver pressionado
+    rjmp end_poll ; Se o botão não estiver pressionado, encerra
 
     ; Debouncing
     call delay_50ms         ; Espera 50ms para debouncing
 
-    sbis PINB, pin_mode      ; Verifica novamente ap�s o delay
-    rjmp mode_pressed      ; Se ainda estiver pressionado, considera como um pressionamento v�lido
+    sbis PINB, pin_mode      ; Verifica novamente após o delay
+    rjmp mode_pressed      ; Se ainda estiver pressionado, considera como um pressionamento válido
 
 mode_not_pressed:
     rjmp end_poll
@@ -508,51 +544,51 @@ cronometro_start:
 end_poll:
     ret
 
-; Verificar bot�o (pin_start)
+; Verificar botão (pin_start)
 poll_start:
-    sbis PINB, pin_start        ; Pula se o bot�o START estiver pressionado
-    rjmp end_poll               ; Se o bot�o n�o estiver pressionado, encerra
+    sbis PINB, pin_start        ; Pula se o botão START estiver pressionado
+    rjmp end_poll               ; Se o botão não estiver pressionado, encerra
 
     ; Debouncing
     call delay_50ms             ; Espera 50ms para debouncing
 
-    sbis PINB, pin_start        ; Verifica novamente ap�s o delay
-    rjmp start_pressed         ; Se ainda estiver pressionado, considera como um pressionamento v�lido
+    sbis PINB, pin_start        ; Verifica novamente após o delay
+    rjmp start_pressed         ; Se ainda estiver pressionado, considera como um pressionamento válido
 
 start_not_pressed:
     rjmp end_poll
 
 start_pressed:
-    ; Compara temp com 0x01 (modo cron�metro)
+    ; Compara temp com 0x01 (modo cronômetro)
     cpi state, 0x01
     call inicia_para_tempo
 
-    ; Compara temp com 0x02 (modo configura��o)
+    ; Compara temp com 0x02 (modo configuração)
     cpi state, 0x02
     call ajusta_tempo
 
     rjmp end_poll
 
-; Verificar bot�o (pin_reset)
+; Verificar botão (pin_reset)
 poll_reset:
-    sbis PINB, pin_reset        ; Pula se o bot�o RESET estiver pressionado
-    rjmp end_poll               ; Se o bot�o n�o estiver pressionado, encerra
+    sbis PINB, pin_reset        ; Pula se o botão RESET estiver pressionado
+    rjmp end_poll               ; Se o botão não estiver pressionado, encerra
 
     ; Debouncing
     call delay_50ms             ; Espera 50ms para debouncing
 
-    sbis PINB, pin_reset        ; Verifica novamente ap�s o delay
-    rjmp reset_pressed         ; Se ainda estiver pressionado, considera como um pressionamento v�lido
+    sbis PINB, pin_reset        ; Verifica novamente após o delay
+    rjmp reset_pressed         ; Se ainda estiver pressionado, considera como um pressionamento válido
 
 reset_not_pressed:
     rjmp end_poll
 
 reset_pressed:
-    ; Compara temp com 0x01 (modo cron�metro)
+    ; Compara temp com 0x01 (modo cronômetro)
     cpi state, 0x01
     call reinicia_tempo
 
-    ; Compara temp com 0x02 (modo configura��o)
+    ; Compara temp com 0x02 (modo configuração)
     cpi state, 0x02
     call aplica_ajuste
 
@@ -579,7 +615,7 @@ end_string:
 ; Entrada: temp, caractere a ser enviado
 ; Saída: nenhuma
 send_char:
-    push 
+    push
     lds temp_seg, UCSR0A            ; Carrega o status da UART
     sbrs temp_seg, UDRE0            ; Espera o registro de dados estar pronto para receber o próximo byte
     rjmp send_char                  ; Loop até estar pronto
@@ -594,4 +630,30 @@ to_ascii:
     add temp, SECS_COUNTER
     ldi temp_seg, 0x30
     add temp_seg, MINUTES_COUNTER
+    ret
+
+
+; Sub-rotina para exibir dois dígitos
+DISPLAY_TWO_DIGITS:
+    push temp
+
+    ; Exibe o dígito das dezenas
+    lsr temp
+    lsr temp
+    andi temp, 0x0F
+    call DISPLAY_DIGIT
+
+    ; Exibe o dígito das unidades
+    pop temp
+    andi temp, 0x0F
+    call DISPLAY_DIGIT
+
+    ret
+
+; Sub-rotina para exibir um dígito
+DISPLAY_DIGIT:
+    mov r16, temp
+    add r16, SEG_TABLE_START
+    out SEGMENT_PORT, r16
+    out DIGIT_PORT, r16
     ret
