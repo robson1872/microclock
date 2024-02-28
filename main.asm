@@ -26,13 +26,40 @@ reset:
 .def FLAG_START = r19      ; Registrador para a flag do bot�o START
 .def FLAG_RESET = r20      ; Registrador para a flag do bot�o RESET
 .def FLAG_MODE = r21       ; Registrador para a flag do bot�o MODE
-.def MINUTES_COUNTER = r24          ; Registrador para armazenar o minuto
-.def SECS_COUNTER = r25         ; Registrador para armazenar o segundo
-.def temp = r23            ; Registrador tempor�rio 
+.def MINUTES_COUNTER = r22          ; Registrador para armazenar o minuto
+.def SECS_COUNTER = r23         ; Registrador para armazenar o segundo
+.def string_pointer = r24       ; Registrador para armazenar o ponteiro da string
+.def string_pointer2 = r25      ; Registrador para armazenar o ponteiro da string 
 .def config_state = r26           ; Registrador para armazenar o estado atual do modo de configuração
 .def CONFIG_MINUTES_COUNTER = r27 ; Registrador para armazenar os segundos (configuração)
 .def CONFIG_SECS_COUNTER = r28  ; Registrador para armazenar os minutos (configuração)
+.def temp = r24            ; Registrador tempor�rio 
+.def temp_seg = r25            ; Registrador tempor�rio 2
 
+; Configuração UART
+; 16Mhz, 9600 baud, UBRR = 103
+.equ UBRRvalue = 103
+ldi temp, high (UBRRvalue) ;baud rate
+sts UBRR0H, temp
+ldi temp, low (UBRRvalue)
+sts UBRR0L, temp
+; 8 bits, 1 bit de parada, sem paridade
+ldi temp, (3<<UCSZ00)
+sts UCSR0C, temp
+ldi temp, (1<<TXEN0) ; habilitando transmiss�o
+sts UCSR0B, temp; 
+
+; Definição de constantes que serão enviadas via serial
+mode1_string: .db "[MODO 1] ", 0
+mode2_string: .db "[MODO 2] ", 0
+mode3_string: .db "[MODO 3] ", 0
+zero_string: .db " ZERO", 0
+start_string: .db " START", 0
+reset_string: .db " RESET", 0
+us_string: .db " Ajustando a unidade dos segundos", 0
+ds_string: .db " Ajustando a dezena dos segundos", 0
+um_string: .db " Ajustando a unidade dos minutos", 0
+dm_string: .db " Ajustando a dezena dos minutos", 0
 
 ; Configura��o de interrup��es
 #define DELAY 1 ;segundos
@@ -144,6 +171,7 @@ modo_configuracao:
 
 ; L�gica para iniciar/parar o cron�metro
 inicia_para_tempo:
+    call uart_modo_cronometro_start
     push temp
     ldi temp, 0x01
     eor FLAG_START, temp
@@ -159,6 +187,7 @@ reinicia_tempo:
     clr TEMP_SECS_COUNTER
 
     call atualiza_display
+    call uart_modo_cronometro_reset
 
 fim_reinicia_tempo:
     ret
@@ -184,16 +213,109 @@ aplica_ajuste:
 atualiza_display:
     ret
 
-; TODO: L�gica para imprimir na serial (Modo 1)
+; L�gica para imprimir na serial (Modo 1)
 uart_modo_relogio:
+    ; Envia "[MODO 1]"
+    ldi r24, low(mode1_string)
+    ldi r25, high(mode1_string)
+    call send_string  
+
+    ; Envia "MM:SS"
+    call to_ascii
+    call send_char
+    ldi temp, ':'
+    call send_char
+    mov temp, temp_seg
+    call send_char
+
     ret 
 
-; TODO: L�gica para imprimir na serial (Modo 2)
+; L�gica para imprimir na serial (Modo 2)
 uart_modo_cronometro:
+    ; Envia "[MODO 2]"
+    ldi r24, low(mode2_string)
+    ldi r25, high(mode2_string)
+    call send_string
+
+    ret
+
+; L�gica para imprimir na serial (Modo 2)
+uart_modo_cronometro_zero:
+    call uart_modo_cronometro ; Envia "[MODO 2]"
+
+    ; Envia " ZERO"
+    ldi r24, low(zero_string)
+    ldi r25, high(zero_string)
+    call send_string
+
     ret 
+
+; L�gica para imprimir na serial (Modo 2)
+uart_modo_cronometro_start:
+    call uart_modo_cronometro ; Envia "[MODO 2]"
+
+    ; Envia " START"
+    ldi r24, low(start_string)
+    ldi r25, high(start_string)
+    call send_string
+
+    ret 
+
+; L�gica para imprimir na serial (Modo 2)
+uart_modo_cronometro_reset:
+    call uart_modo_cronometro ; Envia "[MODO 2]"
+
+    ; Envia " RESET"
+    ldi r24, low(reset_string)
+    ldi r25, high(reset_string)
+    call send_string
+
+    ret
 
 ; TODO: L�gica para imprimir na serial (Modo 3)
 uart_modo_configuracao:
+    ; Envia "[MODO 3]"
+    ldi r24, low(mode3_string)
+    ldi r25, high(mode3_string)
+    call send_string
+
+    ; L�gica para imprimir na serial de acordo com o estado atual de config_state
+    cpi config_state, 0x00
+    breq envia_us
+    cpi config_state, 0x01
+    breq envia_ds
+    cpi config_state, 0x02
+    breq envia_um
+    cpi config_state, 0x03
+    breq envia_dm
+
+envia_us:
+    ; Envia " Ajustando a unidade dos segundos"
+    ldi r24, low(us_string)
+    ldi r25, high(us_string)
+    call send_string
+    ret
+
+envia_ds:
+    ; Envia " Ajustando a dezena dos segundos"
+    ldi r24, low(ds_string)
+    ldi r25, high(ds_string)
+    call send_string
+    ret
+
+envia_um:
+    ; Envia " Ajustando a unidade dos minutos"
+    ldi r24, low(um_string)
+    ldi r25, high(um_string)
+    call send_string
+    ret
+
+envia_dm:
+    ; Envia " Ajustando a dezena dos minutos"
+    ldi r24, low(dm_string)
+    ldi r25, high(dm_string)
+    call send_string
+
     ret 
 
 ; Rotina de interrup��o do Timer0 (0.5 segundo)
@@ -207,6 +329,8 @@ END_ISR_1:
     reti
 
 ; Interrup��o do Timer1 (1 segundo)
+; A cada segundo, incrementa o contador de segundos e atualiza o display
+; Dependendo do estado atual, pode atualizar o tempo no modo de cronômetro ou configuração
 TIMER1_OVF_ISR:
     push temp
     in temp, SREG
@@ -261,7 +385,6 @@ atualiza_modo_cronometro:
     ldi TEMP_MINUTES_COUNTER, 0X0
 
     call atualiza_display
-    call uart_modo_cronometro
 
     rjmp END_ISR
 
@@ -362,6 +485,8 @@ mode_not_pressed:
 
 mode_pressed:
     inc state
+    cpi state, 1
+    breq cronometro_start
     cpi state, 2
     ; Setup para o modo de configuração
     brne not_config
@@ -374,6 +499,11 @@ not_config:
     cpi state, 3
     brne end_poll
     clr state
+    rjmp end_poll
+
+cronometro_start:
+    call uart_modo_cronometro_zero
+    rjmp
 
 end_poll:
     ret
@@ -427,3 +557,41 @@ reset_pressed:
     call aplica_ajuste
 
     rjmp end_poll
+
+; Rotina para enviar uma string armazenada na memória do programa via serial
+; Entrada: ponteiro para a string
+; Saída: nenhuma
+send_string:
+    push string_pointer
+    push string_pointer2
+next_char:
+    lpm temp, Z+               ; Carrega um byte da string na memória do programa para temp
+    tst temp                   ; Testa se o caractere é 0 (fim da string)
+    breq end_string           ; Se for 0, termina a rotina
+    call send_char            ; Envia o caractere
+    rjmp next_char            ; Vai para o próximo caractere
+end_string:
+    pop string_pointer_2
+    pop string_pointer
+    ret
+
+; Rotina para enviar um caractere via serial
+; Entrada: temp, caractere a ser enviado
+; Saída: nenhuma
+send_char:
+    push 
+    lds temp_seg, UCSR0A            ; Carrega o status da UART
+    sbrs temp_seg, UDRE0            ; Espera o registro de dados estar pronto para receber o próximo byte
+    rjmp send_char                  ; Loop até estar pronto
+    sts UDR0, temp                  ; Envia o caractere
+    ret
+
+; Rotina auxiliar para transformar os valores de minutos e segundos em strings
+; Entrada: SECS_COUNTER, MINUTES_COUNTER
+; Saída: temp_seg, temp (valores ASCII dos minutos e segundos, respectivamente)
+to_ascii:
+    ldi temp, 0x30
+    add temp, SECS_COUNTER
+    ldi temp_seg, 0x30
+    add temp_seg, MINUTES_COUNTER
+    ret
